@@ -4,6 +4,7 @@ A dbt reimplementation of `SP_CONSUMER_PREFERENCES_LOAD_DAILY`. All sources feed
 one staging model and one snapshot, so the schema stays small as sources grow.
 History works the same as the old ACTIVE flag, but the snapshot does it natively.
 
+
 ## Flow
 
     raw sources  ->  stg_consumer_prefs (one incremental staging table)
