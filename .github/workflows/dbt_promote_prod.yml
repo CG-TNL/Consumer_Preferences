@@ -38,10 +38,11 @@ jobs:
 
       - name: Build in PRD
         run: |
-          snow dbt execute TEST_PRD_DB.WD_EDA.CONSUMER_PREFERENCES build --target prod --vars '{"env_prefix":"PRD"}' \
+          snow dbt execute \
             --temporary-connection \
             --account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
             --user "${{ secrets.SNOWFLAKE_USER }}" \
             --password "${{ secrets.SNOWFLAKE_PASSWORD }}" \
             --role "${{ secrets.SNOWFLAKE_PROD_ROLE }}" \
-            --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}"
+            --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}" \
+            TEST_PRD_DB.WD_EDA.CONSUMER_PREFERENCES build --target prod --vars '{"env_prefix":"PRD"}'
