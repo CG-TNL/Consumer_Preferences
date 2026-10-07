@@ -1,0 +1,45 @@
+name: dbt CI
+
+# On every pull request into main: deploy the project from the branch into DEV
+# and build it. The check must pass for the PR to merge.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Snowflake CLI
+        run: pip install snowflake-cli
+
+      - name: Deploy the project object into DEV from this branch
+        run: |
+          snow dbt deploy TEST_DB.WD_EDA.CONSUMER_PREFERENCES \
+            --source . \
+            --force \
+            --temporary-connection \
+            --account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --user "${{ secrets.SNOWFLAKE_USER }}" \
+            --password "${{ secrets.SNOWFLAKE_PASSWORD }}" \
+            --role "${{ secrets.SNOWFLAKE_ROLE }}" \
+            --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}"
+
+      - name: Build and test in DEV
+        run: |
+          snow dbt execute TEST_DB.WD_EDA.CONSUMER_PREFERENCES build --target dev \
+            --temporary-connection \
+            --account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --user "${{ secrets.SNOWFLAKE_USER }}" \
+            --password "${{ secrets.SNOWFLAKE_PASSWORD }}" \
+            --role "${{ secrets.SNOWFLAKE_ROLE }}" \
+            --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}"
