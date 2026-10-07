@@ -1,0 +1,51 @@
+name: 'consumer_preferences'
+version: '1.0.0'
+config-version: 2
+profile: 'consumer_preferences'
+
+model-paths: ["models"]
+snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+target-path: "target"
+
+# Environment prefix for source databases (DEV now; pass --vars 'env_prefix: PRD' later).
+# A var is used, not a macro, because macros are not reliably available when
+# Snowflake renders database names in _sources.yml.
+vars:
+  env_prefix: DEV
+
+# Ensure the run-log table exists before models build
+on-run-start:
+  - "{{ ensure_pipeline_run_log() }}"
+
+# Write the run log at the end. Email report is off for the sandbox (FN_SEND_EMAIL
+# lives in DEV_TNL_COMMON_DB, which the trial does not have).
+on-run-end:
+  - "{{ log_run_results() }}"
+
+models:
+  consumer_preferences:
+    staging:
+      +materialized: incremental
+      +on_schema_change: append_new_columns
+    marts:
+      +materialized: view
+      +on_schema_change: append_new_columns
+
+# Failing test rows land in a table for review instead of the target
+# Per-test failure tables are off, so the schema stays clean. Every test's
+# outcome (pass/warn/fail + counts) is still captured in one place:
+# CONSUMER_PREFERENCES_PIPELINE_RUN_LOG_DBT. Set to true to persist failing rows
+# per test again, or use Elementary for one consolidated failures store.
+tests:
+  +store_failures: false
+
+seeds:
+  consumer_preferences:
+    +quote_columns: false
+    consumer_preference_sources_dbt:
+      +column_types:
+        SOURCE_SYSTEM_ID: number
+        IS_ACTIVE: boolean
+        LAST_ETL_UPDATE: timestamp_ntz
