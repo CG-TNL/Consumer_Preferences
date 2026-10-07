@@ -1,0 +1,45 @@
+# TEMPLATES, green each before you rely on it.
+# Move into models/staging/ and run: dbt build --select stg_consumer_prefs
+# Each test uses run_sources so it mocks only the source under test.
+
+unit_tests:
+
+  # Source 6 OFSLL: a permission of neither Y nor N defaults to OPT-OUT,
+  # and one address row produces a PHONE row and an SMS row.
+  - name: ofsll_address_defaults_optout
+    model: stg_consumer_prefs
+    overrides:
+      vars:
+        run_sources: [6]
+    given:
+      - input: source('ofsll_lz', 'address')
+        rows:
+          - ADR_ID: "A1"
+            ADR_PHONE: "303-555-1234"
+            ADR_PERMISSION_TO_CALL_IND: null
+            ADR_PERMISSION_TO_TEXT_IND: "Y"
+            LAST_UPDATE_DATE: "2026-01-01"
+      - input: source('ofsll_lz', 'telecoms')
+        rows: []
+    expect:
+      rows:
+        - {OBJECT_KEY: "3035551234", CHANNEL: "PHONE", COMMUNICATION_TYPE: "TRANSACTIONAL", DECISION: "OPT-OUT", SOURCE_SYSTEM_ID: 6}
+        - {OBJECT_KEY: "3035551234", CHANNEL: "SMS",   COMMUNICATION_TYPE: "TRANSACTIONAL", DECISION: "OPT-IN",  SOURCE_SYSTEM_ID: 6}
+
+  # Source 7 SFMC: a STOP on shortcode 59595 becomes a PHONE OPT-OUT, MARKETING.
+  # Note: the model pulls ALL history for a stopped phone, so each historical
+  # message emits a row. With a single STOP row there is no prior message, so
+  # prev_shared_keyword (the group) is null. Add earlier rows for the same phone
+  # to see the LAG carry the previous keyword into CONSUMER_GROUP.
+  - name: sfmc_stop_becomes_optout
+    model: stg_consumer_prefs
+    overrides:
+      vars:
+        run_sources: [7]
+    given:
+      - input: source('marketing_response', 'sms_messagetracking_combined')
+        rows:
+          - {SUBSCRIBERID: "S2", MOBILE: "303-555-9999", SHAREDKEYWORD: "STOP", SHORTCODE: "59595", OUTBOUND: true, ACTIONDATETIME: "2026-01-02", MODIFIEDDATETIME: "2026-01-02"}
+    expect:
+      rows:
+        - {OBJECT_KEY: "3035559999", CHANNEL: "PHONE", COMMUNICATION_TYPE: "MARKETING", DECISION: "OPT-OUT", SOURCE_SYSTEM_ID: 7}

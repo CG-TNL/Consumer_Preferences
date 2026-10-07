@@ -1,0 +1,30 @@
+# TEMPLATE, green this before you rely on it.
+# To activate: move this file into models/marts/ and run:
+#   dbt build --select vw_consumer_preferences_dbt
+# Unit tests run inside build, so the expect rows must match the view output
+# exactly. Adjust values to your real columns, then green it once.
+#
+# What this checks: the view fills a null/empty DECISION by channel.
+# EMAIL and MEDIA default to OPT-IN; PHONE and SMS default to OPT-OUT.
+# The view is the cleanest place to start: it has no source guard, so you
+# only mock its two refs.
+
+unit_tests:
+  - name: view_defaults_null_decision_by_channel
+    model: vw_consumer_preferences_dbt
+    given:
+      # the raw target table the view reads
+      - input: ref('consumer_preferences_dbt')
+        rows:
+          - {OBJECT_KEY: "a@x.com", CHANNEL: "EMAIL", COMMUNICATION_TYPE: "MARKETING", DECISION: null,      CONSENT_START_DATE: "2026-01-01", CONSENT_END_DATE: null, CONSUMER_GROUP: "G", SOURCE_IDENTIFIER: "1", SOURCE_SYSTEM_ID: 3, ETL_TIMESTAMP: "2026-01-01", ACTIVE: true}
+          - {OBJECT_KEY: "5551234567",       CHANNEL: "PHONE", COMMUNICATION_TYPE: "MARKETING", DECISION: "",   CONSENT_START_DATE: "2026-01-01", CONSENT_END_DATE: null, CONSUMER_GROUP: "G", SOURCE_IDENTIFIER: "2", SOURCE_SYSTEM_ID: 3, ETL_TIMESTAMP: "2026-01-01", ACTIVE: true}
+      # the source registry seed (drives SOURCE_LAST_UPDATE)
+      - input: ref('consumer_preference_sources_dbt')
+        rows:
+          - {SOURCE_SYSTEM_ID: 3, SOURCE_DESCRIPTION: "EXTERNAL_LEADS", IS_ACTIVE: true, LAST_ETL_UPDATE: "2026-01-01"}
+    expect:
+      rows:
+        # null email decision -> OPT-IN
+        - {OBJECT_KEY: "a@x.com", CHANNEL: "EMAIL", COMMUNICATION_TYPE: "MARKETING", DECISION: "OPT-IN"}
+        # empty phone decision -> OPT-OUT
+        - {OBJECT_KEY: "5551234567", CHANNEL: "PHONE", COMMUNICATION_TYPE: "MARKETING", DECISION: "OPT-OUT"}

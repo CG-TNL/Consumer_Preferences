@@ -1,0 +1,45 @@
+# TEMPLATE, green this before you rely on it.
+# To activate: move this file into models/staging/ and run:
+#   dbt build --select stg_consumer_prefs
+#
+# The trick: overrides.vars.run_sources = [1] makes only the CCPA branch build,
+# so you mock ONLY the CCPA source instead of all twelve source tables. Without
+# this, every present source is included and dbt asks you to mock each one.
+#
+# What this checks: one CCPA row with both an email and a phone becomes two
+# staging rows -- a MEDIA/email row and a PHONE row -- both OPT-OUT, both
+# carrying SOURCE_IDENTIFIER from MISC1.
+
+unit_tests:
+  - name: ccpa_row_splits_email_and_phone
+    model: stg_consumer_prefs
+    overrides:
+      vars:
+        run_sources: [1]
+    given:
+      - input: source('marketing_crm', 'cust_info_srch_ccpa_req_tbl')
+        rows:
+          - EMAIL_ADDRESS: "jane@x.com"
+            AREA_CODE: "303"
+            PHONE_NUMBER: "555-1234"
+            MISC1: "ID1"
+            MISC2: "OPT-OUT"
+            MISC3: "2026-01-01"
+            LOAD_DATE: "2026-01-01"
+            ETL_TAG_UPD: "20260101000000000"
+    expect:
+      rows:
+        - OBJECT_KEY: "jane@x.com"
+          CHANNEL: "MEDIA"
+          COMMUNICATION_TYPE: "MARKETING"
+          DECISION: "OPT-OUT"
+          CONSUMER_GROUP: "CCPA"
+          SOURCE_IDENTIFIER: "ID1"
+          SOURCE_SYSTEM_ID: 1
+        - OBJECT_KEY: "3035551234"
+          CHANNEL: "PHONE"
+          COMMUNICATION_TYPE: "MARKETING"
+          DECISION: "OPT-OUT"
+          CONSUMER_GROUP: "CCPA"
+          SOURCE_IDENTIFIER: "ID1"
+          SOURCE_SYSTEM_ID: 1
