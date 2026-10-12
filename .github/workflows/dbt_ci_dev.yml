@@ -1,14 +1,15 @@
-name: dbt CI
+name: dbt CI - DEV
 
-# On every pull request into main: deploy the project from the branch into DEV
-# and build it. The check must pass for the PR to merge.
+# On every pull request into dev: deploy the project from the feature branch
+# into DEV and build it. The warning gate here is lenient (unlimited) so work
+# in progress can still merge to dev. Errors still fail the build.
 
 on:
   pull_request:
-    branches: [main]
+    branches: [dev]
 
 jobs:
-  build_and_test:
+  build_dev:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the branch
@@ -36,6 +37,7 @@ jobs:
 
       - name: Build and test in DEV
         run: |
+          set -o pipefail
           snow dbt execute \
             --temporary-connection \
             --account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
@@ -43,4 +45,14 @@ jobs:
             --password "${{ secrets.SNOWFLAKE_PASSWORD }}" \
             --role "${{ secrets.SNOWFLAKE_ROLE }}" \
             --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}" \
-            TEST_DB.WD_EDA.CONSUMER_PREFERENCES build --target dev
+            TEST_DB.WD_EDA.CONSUMER_PREFERENCES build --target dev \
+            2>&1 | tee build_output.log
+
+      - name: Warning gate (DEV, report only)
+        run: |
+          # DEV is unlimited. Report the warning count but never fail on it.
+          LINE=$(grep -E 'WARN=[0-9]+' build_output.log | tail -1)
+          echo "Summary: $LINE"
+          WARN=$(echo "$LINE" | grep -oE 'WARN=[0-9]+' | cut -d= -f2)
+          WARN=${WARN:-0}
+          echo "Warnings in DEV: $WARN (limit: unlimited)"

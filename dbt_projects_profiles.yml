@@ -1,10 +1,10 @@
 # dbt Projects on Snowflake runs under the current Snowflake account and user,
 # so account and user stay blank. type must be snowflake.
 #
-# Two targets: dev and prod. database + schema is where dbt BUILDS its objects.
-# For the sandbox demo, dev builds into TEST_DB and prod into TEST_PRD_DB, one
-# account. Swap the database and role lines for the real values in comments to
-# point at the real DEV and PRD.
+# Three targets: dev, qa, prod. database + schema is where dbt BUILDS its objects.
+# For the sandbox demo, dev builds into TEST_DB, qa into TEST_QA_DB, prod into
+# TEST_PRD_DB, one account. Swap the database and role lines for the real values
+# in comments to point at the real DEV, QA, and PRD.
 
 consumer_preferences:
   target: dev
@@ -16,6 +16,16 @@ consumer_preferences:
       role: ACCOUNTADMIN                    # real: DEV_FRL_TNL_BUS_EDA_DBA
       database: TEST_DB                      # real: DEV_WD_USR_WRKSPC_DB
       warehouse: COMPUTE_WH                  # real: DEV_TNL_BUS_EDA_WH
+      schema: WD_EDA
+      threads: 8
+
+    qa:
+      type: snowflake
+      account: ""
+      user: ""
+      role: ACCOUNTADMIN                    # real: QA role
+      database: TEST_QA_DB                   # real: QA_WD_USR_WRKSPC_DB or the QA build DB
+      warehouse: COMPUTE_WH                  # real: QA warehouse
       schema: WD_EDA
       threads: 8
 

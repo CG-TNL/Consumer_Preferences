@@ -1,0 +1,66 @@
+name: dbt CI - PRD gate
+
+# On every pull request into main (from qa): this is the pre-PRD gate. It builds
+# the project one more time and enforces the strictest warning limit before the
+# code is allowed to merge to main. It does NOT touch PRD. The build runs against
+# QA source data (TEST_QA_DB), so PRD stays untouched until the approver gate on
+# the Promote to PRD job after merge. The warning count here is the number that
+# must clear the PRD limit.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build_prd_gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Snowflake CLI
+        run: pip install snowflake-cli
+
+      - name: Deploy the project object into QA for the gate build
+        run: |
+          snow dbt deploy TEST_QA_DB.WD_EDA.CONSUMER_PREFERENCES \
+            --source . \
+            --force \
+            --temporary-connection \
+            --account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --user "${{ secrets.SNOWFLAKE_USER }}" \
+            --password "${{ secrets.SNOWFLAKE_PASSWORD }}" \
+            --role "${{ secrets.SNOWFLAKE_ROLE }}" \
+            --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}"
+
+      - name: Build and test (gate build against QA data)
+        run: |
+          set -o pipefail
+          snow dbt execute \
+            --temporary-connection \
+            --account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --user "${{ secrets.SNOWFLAKE_USER }}" \
+            --password "${{ secrets.SNOWFLAKE_PASSWORD }}" \
+            --role "${{ secrets.SNOWFLAKE_ROLE }}" \
+            --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}" \
+            TEST_QA_DB.WD_EDA.CONSUMER_PREFERENCES build --target qa --vars '{"env_prefix":"QA"}' \
+            2>&1 | tee build_output.log
+
+      - name: Warning gate (PRD limit, max 2)
+        run: |
+          MAX_WARN=2
+          LINE=$(grep -E 'WARN=[0-9]+' build_output.log | tail -1)
+          echo "Summary: $LINE"
+          WARN=$(echo "$LINE" | grep -oE 'WARN=[0-9]+' | cut -d= -f2)
+          WARN=${WARN:-0}
+          echo "Warnings for PRD gate: $WARN (max allowed: $MAX_WARN)"
+          if [ "$WARN" -gt "$MAX_WARN" ]; then
+            echo "::error::Warning count $WARN exceeds the PRD limit of $MAX_WARN"
+            exit 1
+          fi
+          echo "PRD warning gate passed."

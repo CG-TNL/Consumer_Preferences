@@ -38,6 +38,7 @@ jobs:
 
       - name: Build in PRD
         run: |
+          set -o pipefail
           snow dbt execute \
             --temporary-connection \
             --account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
@@ -45,4 +46,15 @@ jobs:
             --password "${{ secrets.SNOWFLAKE_PASSWORD }}" \
             --role "${{ secrets.SNOWFLAKE_PROD_ROLE }}" \
             --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}" \
-            TEST_PRD_DB.WD_EDA.CONSUMER_PREFERENCES build --target prod --vars '{"env_prefix":"PRD"}'
+            TEST_PRD_DB.WD_EDA.CONSUMER_PREFERENCES build --target prod --vars '{"env_prefix":"PRD"}' \
+            2>&1 | tee build_output.log
+
+      - name: Warning count (PRD, report only)
+        run: |
+          # The enforcing warning gate already ran on the qa to main PR. This is
+          # the actual PRD build against PRD data, reported for the run log.
+          LINE=$(grep -E 'WARN=[0-9]+' build_output.log | tail -1)
+          echo "Summary: $LINE"
+          WARN=$(echo "$LINE" | grep -oE 'WARN=[0-9]+' | cut -d= -f2)
+          WARN=${WARN:-0}
+          echo "Warnings in PRD: $WARN"

@@ -1,0 +1,64 @@
+name: dbt CI - QA
+
+# On every pull request into qa (from dev): deploy the project into QA and build
+# it against QA source data. The warning gate is stricter than DEV: the build
+# may have at most MAX_WARN warnings or the check fails and the PR cannot merge.
+# Errors still fail the build regardless.
+
+on:
+  pull_request:
+    branches: [qa]
+
+jobs:
+  build_qa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Snowflake CLI
+        run: pip install snowflake-cli
+
+      - name: Deploy the project object into QA from this branch
+        run: |
+          snow dbt deploy TEST_QA_DB.WD_EDA.CONSUMER_PREFERENCES \
+            --source . \
+            --force \
+            --temporary-connection \
+            --account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --user "${{ secrets.SNOWFLAKE_USER }}" \
+            --password "${{ secrets.SNOWFLAKE_PASSWORD }}" \
+            --role "${{ secrets.SNOWFLAKE_ROLE }}" \
+            --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}"
+
+      - name: Build and test in QA
+        run: |
+          set -o pipefail
+          snow dbt execute \
+            --temporary-connection \
+            --account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --user "${{ secrets.SNOWFLAKE_USER }}" \
+            --password "${{ secrets.SNOWFLAKE_PASSWORD }}" \
+            --role "${{ secrets.SNOWFLAKE_ROLE }}" \
+            --warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}" \
+            TEST_QA_DB.WD_EDA.CONSUMER_PREFERENCES build --target qa --vars '{"env_prefix":"QA"}' \
+            2>&1 | tee build_output.log
+
+      - name: Warning gate (QA, max 5)
+        run: |
+          MAX_WARN=5
+          LINE=$(grep -E 'WARN=[0-9]+' build_output.log | tail -1)
+          echo "Summary: $LINE"
+          WARN=$(echo "$LINE" | grep -oE 'WARN=[0-9]+' | cut -d= -f2)
+          WARN=${WARN:-0}
+          echo "Warnings in QA: $WARN (max allowed: $MAX_WARN)"
+          if [ "$WARN" -gt "$MAX_WARN" ]; then
+            echo "::error::Warning count $WARN exceeds the QA limit of $MAX_WARN"
+            exit 1
+          fi
+          echo "QA warning gate passed."
