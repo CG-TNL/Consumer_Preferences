@@ -558,9 +558,9 @@ _guard as (select 1 as x)
 
 {% if branches | length > 0 %}
 {{ branches | join('\nunion all\n') }}
-PRD warning-gate demo. Dormant while commented, no effect on normal builds.
-On a branch, uncomment the six lines below to add three warnings (and no errors):
-phone_key_format, consent_end_after_start, consumer_group_present. WARN=3.
+-- PRD warning-gate demo. Dormant while commented, no effect on normal builds.
+-- On a branch, uncomment the six lines below to add three warnings (and no errors):
+-- phone_key_format, consent_end_after_start, consumer_group_present. WARN=3.
 union all
 select '5551234','PHONE','MARKETING','OPT-OUT',cast(null as timestamp_ntz),cast(null as timestamp_ntz),'DEMO','DEMO-1',2,current_timestamp()::timestamp_ntz
 union all
